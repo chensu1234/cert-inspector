@@ -1,152 +1,202 @@
-# cert-inspector 🔐
+# cert-inspector 🔒
 
-> SSL/TLS 证书检查与过期监控工具
+> SSL/TLS 证书检查工具 — 快速检查证书链、过期时间、加密套件和潜在安全问题
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Shell](https://img.shields.io/badge/Shell-Bash-green.svg)](https://www.gnu.org/software/bash/)
-[![OpenSSL](https://img.shields.io/badge/OpenSSL-Required-blue.svg)](https://www.openssl.org/)
+[![Go Version](https://img.shields.io/badge/Go-1.21+-00ADD8.svg)](https://golang.org/)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows-blue.svg)](https://golang.org/)
 
-自动检查 SSL/TLS 证书过期时间，支持 Slack / 飞书 Webhook 告警，守护进程模式持续监控。
+`cert-inspector` 是一个轻量、高效的 SSL/TLS 证书检查工具，无需外部依赖即可运行。可批量检查多个主机的证书状态，识别过期、弱签名算法、废弃 TLS 版本等问题。
 
 ## ✨ 特性
 
-- 🚀 **轻量级** — 纯 Bash 脚本，仅依赖 OpenSSL
-- 📅 **过期监控** — 自动检测即将过期的证书，支持自定义告警阈值
-- 🔗 **SNI 支持** — 支持多域名共享 IP 的证书检查
-- 📢 **多平台通知** — 支持 Slack、飞书 Webhook 告警
-- 🖥️ **守护模式** — 支持持续监控，定时检测
-- 📝 **详细日志** — 完整的检查记录和状态变更日志
-- 🔧 **灵活配置** — 支持配置文件和命令行参数双重配置
+- 🔒 **完整证书链分析** — 显示从 Leaf 到 Root CA 的完整链
+- ⏱️ **过期预警** — 可配置警告 / 严重阈值，智能分级
+- 🔍 **加密质量检测** — TLS 版本、加密套件、签名算法检查
+- ⚠️ **安全问题识别** — 检测弱签名 (MD5/SHA1)、废弃 TLS 版本 (1.0/1.1)
+- 📊 **批量检查** — 一行命令检查任意数量主机
+- 🎨 **彩色输出** — 终端友好的彩色状态报告
+- ⚡ **零依赖** — 纯 Go 编写，仅依赖标准库
+- 🔔 **Webhook 支持** — 可选通知到 Slack 等 Webhook
 
 ## 🏃 快速开始
 
 ### 安装
 
+**方式一：下载预编译二进制（推荐）**
+
 ```bash
-# 克隆项目
+# macOS (Apple Silicon)
+curl -sL https://github.com/chensu1234/cert-inspector/releases/latest/download/cert-inspector-darwin-arm64 -o cert-inspector
+chmod +x cert-inspector
+
+# macOS (Intel)
+curl -sL https://github.com/chensu1234/cert-inspector/releases/latest/download/cert-inspector-darwin-amd64 -o cert-inspector
+chmod +x cert-inspector
+
+# Linux
+curl -sL https://github.com/chensu1234/cert-inspector/releases/latest/download/cert-inspector-linux-amd64 -o cert-inspector
+chmod +x cert-inspector
+```
+
+**方式二：从源码构建**
+
+```bash
 git clone https://github.com/chensu1234/cert-inspector.git
 cd cert-inspector
-
-# 添加执行权限
-chmod +x bin/cert-inspector.sh
+go build -o bin/cert-inspector ./cmd/cert-inspector/
 ```
 
 ### 使用
 
 ```bash
-# 使用默认配置 (config/hosts.conf) 单次检查
-./bin/cert-inspector.sh
+# 检查单个主机
+./bin/cert-inspector github.com:443
 
-# 指定配置文件
-./bin/cert-inspector.sh -c /path/to/hosts.conf
+# 检查多个主机
+./bin/cert-inspector github.com:443 google.com:443 cloudflare.com:443
 
-# 设置 14 天告警阈值
-./bin/cert-inspector.sh -d 14
+# 使用配置文件批量检查
+./bin/cert-inspector -c config/hosts.conf
 
-# 启用 Slack 通知
-./bin/cert-inspector.sh -w "https://hooks.slack.com/services/xxx"
+# 自定义警告阈值
+./bin/cert-inspector -w 60 -crt 14 -c config/hosts.conf
 
-# 启用飞书通知
-./bin/cert-inspector.sh -w "https://open.feishu.cn/..."
+# 设置连接超时
+./bin/cert-inspector -t 5 github.com:443
 
-# 守护模式：每 60 分钟检查一次
-./bin/cert-inspector.sh -m monitor -i 60 -w "https://hooks.slack.com/..."
-```
-
-### 依赖
-
-```bash
-# macOS
-brew install openssl
-
-# Ubuntu/Debian
-sudo apt install openssl
-
-# CentOS/RHEL
-sudo yum install openssl
+# 启用 Webhook 通知
+./bin/cert-inspector -W "https://hooks.slack.com/services/xxx" -c config/hosts.conf
 ```
 
 ## ⚙️ 配置
 
-编辑 `config/hosts.conf` 文件：
+编辑 `config/hosts.conf`，每行一个 `host:port`，`#` 开头的行为注释：
 
 ```bash
-# 格式: host 或 host:port
-# 注释以 # 开头
+# 格式: host:port
 
-# 常用网站
-google.com
-github.com
+# 主要网站
+github.com:443
+google.com:443
+cloudflare.com:443
 
-# 指定端口
-api.example.com:8443
-internal.example.com:4433
+# API 服务
+api.github.com:443
+api.stripe.com:443
 
-# 支持 SNI 的虚拟主机
-secure.example.com:443
+# CDN
+cdn.jsdelivr.net:443
+unpkg.com:443
+
+# 测试域名
+# expired.badssl.com:443
+# self-signed.badssl.com:443
 ```
 
 ## 📋 命令行选项
 
 | 选项 | 说明 | 默认值 |
 |------|------|--------|
-| -c, --config FILE | 配置文件路径 | ./config/hosts.conf |
-| -o, --output FILE | 日志输出文件 | ./log/cert-inspector.log |
-| -d, --days DAYS | 提前告警天数 | 30 |
-| -w, --webhook URL | Webhook 通知 URL | - |
-| -i, --interval MIN | 监控模式检测间隔(分钟) | 1440 |
-| -m, --mode MODE | 运行模式: check/monitor | check |
-| -t, --timeout SEC | 连接超时秒数 | 10 |
-| -h, --help | 显示帮助信息 | - |
-| -v, --version | 显示版本信息 | - |
+| `-c`, `--config FILE` | 主机列表配置文件 | `./config/hosts.conf` |
+| `-w`, `--warn DAYS` | 警告阈值（天） | `30` |
+| `-crt`, `--critical DAYS` | 严重阈值（天） | `7` |
+| `-t`, `--timeout SECS` | 连接超时（秒） | `10` |
+| `-j`, `--json` | 输出 JSON 格式 | `false` |
+| `-W`, `--webhook URL` | Webhook 通知地址 | `-` |
+| `-h`, `--help` | 显示帮助 | - |
+
+## 📊 输出示例
+
+```
+╔═══════════════════════════════════════════════════════╗
+║      🔒  cert-inspector v1.0.0                         ║
+║      SSL/TLS Certificate Inspector                     ║
+╚═══════════════════════════════════════════════════════╝
+
+  Warn threshold:     30 days
+  Critical threshold: 7 days
+  Timeout:           10 seconds
+  Hosts:             1
+
+🔍 Inspecting github.com:443 ... ✓
+
+═══════════════════════════════════════════════════════
+  github.com:443         [OK]
+═══════════════════════════════════════════════════════
+  ✓ Reachable        (252.00ms)
+  TLS Version:   TLS 1.3
+  Cipher Suite:  TLS_AES_128_GCM_SHA256
+
+  ── Leaf Certificate ──
+    Subject:       github.com
+    Issuer:        Sectigo Public Server Authentication CA DV E36
+    Valid From:    2026-03-06
+    Valid Until:   2026-06-03 23:59 (62 days)
+    Algorithm:     ECDSA-SHA256
+    Serial:        39557711522153605937503944820825465427
+    DNS Names:     github.com, www.github.com
+    Fingerprint:   97:16:D3:94:41:CA:65:1C:51:BE:78:E9:...
+
+  ── Root CA ──
+    Subject:       Sectigo Public Server Authentication Root E46
+    Issuer:        USERTrust ECC Certification Authority
+    Valid Until:   2038-01-18 23:59 (4309 days)
+    Algorithm:     ECDSA-SHA384
+
+────────────────────────────────────────────────────────────
+  📊  1 hosts    ✓ OK: 1  ⚠ WARN: 0  ✗ CRIT: 0  ✗ ERR: 0
+────────────────────────────────────────────────────────────
+```
+
+## ⚠️ 告警状态说明
+
+| 状态 | 颜色 | 含义 |
+|------|------|------|
+| `OK` | 🟢 绿 | 证书状态正常，距离过期天数 > 警告阈值 |
+| `WARN` | 🟡 黄 | 证书在警告阈值内（30天）需关注 |
+| `CRIT` | 🔴 红 | 证书在严重阈值内（7天）或已过期 |
+| `ERROR` | 🔴 红 | 无法连接或证书解析失败 |
 
 ## 📁 项目结构
 
 ```
 cert-inspector/
-├── bin/
-│   └── cert-inspector.sh      # 主脚本
+├── cmd/
+│   └── cert-inspector/          # 主程序入口
+│       └── main.go
 ├── config/
-│   └── hosts.conf             # 主机配置
-├── log/                       # 日志目录
+│   └── hosts.conf               # 主机列表配置
+├── log/                         # 日志目录
 │   └── .gitkeep
+├── bin/                         # 编译输出目录
 ├── README.md
-└── LICENSE
+├── LICENSE
+├── go.mod
+└── .gitignore
 ```
 
-## 🔔 通知集成
+## 🔧 技术细节
 
-### Slack
+- **语言**: Go 1.21+
+- **依赖**: 仅 Go 标准库（无外部依赖）
+- **连接方式**: `crypto/tls.DialWithDialer` 底层 TCP 连接
+- **指纹算法**: SHA-256 over DER-encoded certificate
+- **TLS 版本**: 支持 TLS 1.0 / 1.1 / 1.2 / 1.3
+- **超时控制**: `net.Dialer` 主动超时管理
 
-```bash
-./bin/cert-inspector.sh -w "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
-```
+## 📝 CHANGELOG
 
-### 飞书
+### v1.0.0 (2026-04-02)
 
-```bash
-./bin/cert-inspector.sh -w "https://open.feishu.cn/..."
-```
-
-## 📝 日志说明
-
-日志默认保存在 `./log/cert-inspector.log`，包含：
-
-- 每次检查的时间戳
-- 证书主体信息 (Subject)
-- 证书颁发者 (Issuer)
-- 过期日期和剩余天数
-- 告警通知发送记录
-- 旧日志（超过 7 天）自动清理
-
-## 🏗️ 扩展
-
-- [ ] 添加邮件通知支持
-- [ ] 添加企业微信通知
-- [ ] 添加 Prometheus 指标导出
-- [ ] 添加 CSV/JSON 报告导出
-- [ ] 添加证书链完整性检查
-- [ ] 添加 Web 界面
+- ✨ 初始版本发布
+- 🔒 完整证书链分析（Leaf / Intermediate / Root CA）
+- ⏱️ 可配置过期预警（Warn / Critical）
+- 🔍 TLS 版本、加密套件、签名算法检查
+- ⚠️ 弱签名 / 废弃 TLS 版本警告
+- 🎨 彩色终端输出
+- 🔔 Webhook 通知支持
+- 📄 JSON 输出模式
 
 ## 📄 许可证
 
